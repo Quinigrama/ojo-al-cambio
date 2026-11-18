@@ -2,12 +2,12 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#14171a" />
   <meta name="description" content="Juego arcade de matemáticas rápidas y reflejos detrás del mostrador contra el timo del cambio." />
   <link rel="manifest" href="./manifest.json" />
   <link rel="icon" type="image/svg+xml" href="./icon.svg" />
-  <link rel="apple-touch-icon" href="./icon.svg" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
   <title>OJO AL CAMBIO — Simulador de Mostrador</title>
   <style>
     :root {
@@ -38,6 +38,7 @@
       height: 100vh;
       height: 100dvh;
       overflow: hidden;
+      touch-action: manipulation;
     }
 
     header {
@@ -170,30 +171,59 @@
       pointer-events: none;
     }
 
-    #table-items {
-      position: absolute;
-      inset: 0;
+    .zone {
+      flex: 1;
+      display: flex;
+      flex-wrap: wrap;
+      align-content: center;
+      justify-content: center;
+      gap: 14px 12px;
+      padding: 10px 4px;
+      min-height: 70px;
+    }
+    #player-zone {
+      border-top: 2px dashed rgba(255,255,255,0.18);
     }
 
     .money-item {
-      position: absolute;
+      position: relative;
       cursor: pointer;
-      transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), left 0.35s ease, top 0.35s ease;
+      transition: transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
       box-shadow: 0 6px 12px rgba(0,0,0,0.45);
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 900;
     }
+    .money-item.fresh { animation: dropIn 0.18s ease-out; }
+    @keyframes dropIn {
+      from { transform: translateY(-10px) scale(0.9); opacity: 0; }
+      to { opacity: 1; }
+    }
+    .money-item:active { transform: scale(0.94); }
+    @media (hover: hover) {
+      .money-item:hover { transform: scale(1.06) translateY(-3px); }
+    }
 
-    .money-item:hover {
-      transform: scale(1.08) translateY(-4px) !important;
-      z-index: 50 !important;
+    /* Montón de piezas iguales: se ven capas detrás y un contador ×N */
+    .money-item.stacked.bill { box-shadow: 4px 4px 0 -1px rgba(0,0,0,0.35), 8px 8px 0 -2px rgba(0,0,0,0.25), 0 6px 12px rgba(0,0,0,0.45); }
+    .money-item.stacked.coin { box-shadow: 3px 3px 0 0 rgba(0,0,0,0.35), 6px 6px 0 0 rgba(0,0,0,0.22), 0 6px 12px rgba(0,0,0,0.45); }
+    .count-badge {
+      position: absolute;
+      bottom: -9px;
+      right: -9px;
+      background: var(--accent);
+      color: #111;
+      font-size: 0.78rem;
+      font-weight: 900;
+      padding: 1px 6px;
+      border-radius: 10px;
+      border: 2px solid #111;
     }
 
     .bill {
-      width: 102px;
-      height: 52px;
+      width: 92px;
+      height: 48px;
       border-radius: 5px;
       border: 2px solid rgba(255,255,255,0.4);
       font-size: 1.12rem;
@@ -264,7 +294,7 @@
       display: none;
     }
     #thief-hand.tease { top: -18px; animation: pulseHand 0.35s infinite alternate; }
-    #thief-hand.grab { top: 38%; }
+    #thief-hand.grab { top: 32%; }
 
     @keyframes pulseHand {
       from { transform: translateX(-50%) scale(1); }
@@ -413,6 +443,16 @@
     .shop-card.owned { border-color: var(--success); opacity: 0.8; }
     .shop-card h4 { margin: 0; font-size: 0.86rem; color: #f9fafb; }
     .shop-card small { font-size: 0.74rem; color: #9ca3af; line-height: 1.3; }
+
+    .mode-pick {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .mode-pick .btn { width: 100%; font-size: 0.95rem; }
+    .btn-relax { background: #0ea5e9; color: #04253a; }
+    .mode-note { font-size: 0.75rem !important; color: #9ca3af !important; }
   </style>
 </head>
 <body>
@@ -442,10 +482,11 @@
   </section>
 
   <main id="counter">
-    <div class="zone-label">▲ Lado del Cliente (Pincha sus billetes para guardarlos en tu caja)</div>
-    <div id="table-items"></div>
+    <div class="zone-label">▲ Dinero del cliente (pincha para cobrarlo)</div>
+    <div class="zone" id="cust-zone"></div>
     <div id="thief-hand" title="¡Pincha su mano para frenarlo!">🖐️</div>
-    <div class="zone-label" style="text-align:right;">▼ Tu Cambio en Mesa (Pincha para devolverlo a tu cajón)</div>
+    <div class="zone" id="player-zone"></div>
+    <div class="zone-label" style="text-align:right;">▼ Tu cambio (pincha una pieza para retirarla)</div>
   </main>
 
   <section id="register-area">
@@ -513,15 +554,18 @@
       osc.stop(audioCtx.currentTime + dur);
     }
 
+    // baseTime = segundos base por cliente; además se suman segundos por cada pieza que necesite el cambio
     const DAYS = [
-      { name: "Lunes", desc: "Mañana tranquila de barrio", clients: 4, speed: 0.48, scamChance: 0.30, fakeChance: 0.15 },
-      { name: "Martes", desc: "Empiezan los billetes grandes", clients: 5, speed: 0.56, scamChance: 0.42, fakeChance: 0.20 },
-      { name: "Miércoles", desc: "Día de recados y prisas", clients: 6, speed: 0.64, scamChance: 0.50, fakeChance: 0.22 },
-      { name: "Jueves", desc: "Víspera animada", clients: 7, speed: 0.72, scamChance: 0.55, fakeChance: 0.25 },
-      { name: "Viernes", desc: "Hora punta de tarde", clients: 8, speed: 0.82, scamChance: 0.62, fakeChance: 0.28 },
-      { name: "Sábado", desc: "Mercadillo y gentío", clients: 9, speed: 0.90, scamChance: 0.68, fakeChance: 0.30 },
-      { name: "Domingo", desc: "Cierre semanal — Máxima tensión", clients: 10, speed: 1.00, scamChance: 0.75, fakeChance: 0.32 }
+      { name: "Lunes", desc: "Mañana tranquila de barrio", clients: 4, baseTime: 30, scamChance: 0.30, fakeChance: 0.15 },
+      { name: "Martes", desc: "Empiezan los billetes grandes", clients: 5, baseTime: 28, scamChance: 0.42, fakeChance: 0.20 },
+      { name: "Miércoles", desc: "Día de recados y prisas", clients: 6, baseTime: 26, scamChance: 0.50, fakeChance: 0.22 },
+      { name: "Jueves", desc: "Víspera animada", clients: 7, baseTime: 24, scamChance: 0.55, fakeChance: 0.25 },
+      { name: "Viernes", desc: "Hora punta de tarde", clients: 8, baseTime: 22, scamChance: 0.62, fakeChance: 0.28 },
+      { name: "Sábado", desc: "Mercadillo y gentío", clients: 9, baseTime: 20, scamChance: 0.68, fakeChance: 0.30 },
+      { name: "Domingo", desc: "Cierre semanal — Máxima tensión", clients: 10, baseTime: 18, scamChance: 0.75, fakeChance: 0.32 }
     ];
+    const SECONDS_PER_PIECE = 2.5;
+    const DENOMS = [50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1];
 
     const UPGRADES = [
       { id: "camera", name: "📹 Cámara HD", cost: 35, desc: "Frena un 35% la mano del timador." },
@@ -543,6 +587,16 @@
 
     const AVATARS = ["🧔", "🕵️", "👩‍🦱", "🧓", "👱‍♂️", "🧕", "🧢", "🕶️"];
 
+    // Frases comunes para TODOS los clientes: así la frase no delata al que trae un billete falso
+    const PAY_LINES = [
+      (p, b) => `Buenas, me llevo ${p}. Aquí tienes ${b} €.`,
+      (p, b) => `Dame ${p}, toma este billete de ${b} €.`,
+      (p, b) => `Cóbrate ${p} de este de ${b} €, llevo prisa.`,
+      (p, b) => `¿Me cobras ${p}? Solo llevo este de ${b} €, perdona.`,
+      (p, b) => `Ponme ${p}. Te pago con ${b} €.`
+    ];
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
     const STORAGE_KEY = "ojo_al_cambio_records_v1";
     function getRecords() {
       try {
@@ -552,11 +606,12 @@
       }
     }
     function saveRecords(cash, streak, weekCompleted = false) {
+      if (state.relaxed) return; // el modo relajado no cuenta para récords
       const rec = getRecords();
       if (cash > rec.bestCash) rec.bestCash = +cash.toFixed(2);
       if (streak > rec.bestStreak) rec.bestStreak = streak;
       if (weekCompleted) rec.weeksWon += 1;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(rec));
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(rec)); } catch {}
     }
 
     let state = {
@@ -568,17 +623,32 @@
       upgrades: {},
       uvOn: false,
       active: false,
+      relaxed: false,
       timeLeft: 100,
       timerId: null,
       scamTimerId: null,
+      handTimers: [],
       currentProduct: null,
       collectedFromCustomer: 0,
       itemsOnTable: [],
       hasFakeBill: false,
+      fakeVal: 0,
       handState: 'hidden'
     };
 
+    const round2 = (n) => Math.round(n * 100) / 100;
     const fmt = (n) => n.toFixed(2).replace('.', ',') + ' €';
+
+    // Número mínimo de piezas para dar un cambio (para calcular el tiempo justo)
+    function piecesFor(amount) {
+      let cents = Math.round(amount * 100), n = 0;
+      for (const d of DENOMS) {
+        const dc = Math.round(d * 100);
+        n += Math.floor(cents / dc);
+        cents %= dc;
+      }
+      return n;
+    }
 
     function showToast(msg, color = '#f59e0b') {
       const t = document.getElementById('toast');
@@ -621,72 +691,92 @@
             <div>Semanas<b>${rec.weeksWon}</b></div>
           </div>
           <div class="rules-list">
-            • <b>Recoge su dinero:</b> Pincha en los billetes/monedas del cliente para guardarlos.<br>
-            • <b>Prepara el cambio:</b> Toca tu cajón inferior para colocar billetes y monedas.<br>
-            • <b>Vigila sus manos:</b> Si su mano entra a robar o dar el cambiazo, <b>pínchala rápido</b>.<br>
-            • <b>Luz UV (Tecla U):</b> Detecta billetes falsos antes de cerrar la venta.
+            • <b>Cobra:</b> pincha los billetes y monedas del cliente para guardarlos.<br>
+            • <b>Prepara el cambio:</b> toca tu cajón; las piezas iguales se apilan con un contador ×N.<br>
+            • <b>Vigila sus manos:</b> si su mano entra a robar o dar el cambiazo, <b>pínchala rápido</b>.<br>
+            • <b>Luz UV (tecla U):</b> los billetes buenos muestran la marca ★ EUR. Si no la tiene, ¡denúncialo!<br>
+            • <b>Tiempo:</b> cuanto más cambio hay que dar, más tiempo tienes.
           </div>
-          <button class="btn btn-done" style="width:100%; font-size:1.05rem;" onclick="startNewWeek()">EMPEZAR LUNES</button>
+          <div class="mode-pick">
+            <button class="btn btn-done" onclick="startNewWeek(false)">⏱️ NORMAL</button>
+            <button class="btn btn-relax" onclick="startNewWeek(true)">☕ RELAJADO</button>
+          </div>
+          <p class="mode-note">Relajado: sin reloj, para echar las cuentas con calma (no cuenta para récords).</p>
           <button id="btn-install-app" class="btn btn-install" style="${deferredPrompt ? 'display:block' : 'display:none'}" onclick="installPWA()">📲 INSTALAR APP EN DISPOSITIVO</button>
         </div>
       `;
       ov.style.display = 'flex';
     }
 
-    function startNewWeek() {
+    function startNewWeek(relaxed = false) {
+      state.relaxed = relaxed;
       state.cash = 200;
       state.dayStartCash = 200;
       state.streak = 0;
       state.dayIdx = 0;
       state.clientInDay = 0;
       state.upgrades = {};
+      document.getElementById('timer-bar-wrap').style.visibility = relaxed ? 'hidden' : 'visible';
       document.getElementById('overlay').style.display = 'none';
       nextClient();
     }
 
     function spawnItemOnTable(val, owner, fake = false) {
       const id = 'item_' + Math.random().toString(36).slice(2, 9);
-      const isCustomer = owner === 'customer';
-      const x = 14 + Math.random() * 64;
-      const y = isCustomer ? (16 + Math.random() * 22) : (54 + Math.random() * 22);
-      const rot = (Math.random() * 18 - 9).toFixed(1);
-      state.itemsOnTable.push({ id, val, owner, fake, x, y, rot });
+      const rot = owner === 'customer' ? +(Math.random() * 10 - 5).toFixed(1) : 0;
+      state.itemsOnTable.push({ id, val, owner, fake, rot });
+      state.lastAddedId = id;
       renderTable();
     }
 
+    function buildPiece(val, fake, ownerLabel) {
+      const el = document.createElement('div');
+      const isBill = val >= 5;
+      el.className = 'money-item ' + (isBill ? 'bill' : 'coin');
+      if (isBill) {
+        el.dataset.val = val;
+        el.classList.add(fake ? 'fake' : 'authentic');
+        el.innerHTML = `<span>${val} €</span><div class="uv-mark"><span>★ EUR</span><span>OK</span></div>`;
+      } else {
+        el.classList.add(val >= 1 ? 'gold' : (val >= 0.2 ? 'silver' : 'copper'));
+        el.innerHTML = `<span>${val >= 1 ? val + '€' : Math.round(val * 100) + 'c'}</span>`;
+      }
+      if (ownerLabel) el.insertAdjacentHTML('beforeend', `<div class="owner-badge">${ownerLabel}</div>`);
+      return el;
+    }
+
     function renderTable() {
-      const container = document.getElementById('table-items');
-      container.innerHTML = '';
+      const custZone = document.getElementById('cust-zone');
+      const playerZone = document.getElementById('player-zone');
+      custZone.innerHTML = '';
+      playerZone.innerHTML = '';
 
-      state.itemsOnTable.forEach((item, idx) => {
-        const el = document.createElement('div');
-        const isBill = item.val >= 5;
-        el.className = 'money-item ' + (isBill ? 'bill' : 'coin');
-        if (isBill) {
-          el.dataset.val = item.val;
-          el.classList.add(item.fake ? 'fake' : 'authentic');
-          el.innerHTML = `
-            <span>${item.val} €</span>
-            <div class="uv-mark"><span>★ EUR</span><span>OK</span></div>
-            <div class="owner-badge">${item.owner === 'customer' ? 'Cliente' : 'Tu cambio'}</div>
-          `;
-        } else {
-          const coinType = item.val >= 1 ? 'gold' : (item.val >= 0.2 ? 'silver' : 'copper');
-          el.classList.add(coinType);
-          el.innerHTML = `
-            <span>${item.val >= 1 ? item.val + '€' : Math.round(item.val * 100) + 'c'}</span>
-            <div class="owner-badge">${item.owner === 'customer' ? 'Cli' : 'Tú'}</div>
-          `;
-        }
-
-        el.style.left = item.x + '%';
-        el.style.top = item.y + '%';
+      // Cliente: cada pieza por separado
+      state.itemsOnTable.filter(i => i.owner === 'customer').forEach(item => {
+        const el = buildPiece(item.val, item.fake, 'Cliente');
         el.style.transform = `rotate(${item.rot}deg)`;
-        el.style.zIndex = 10 + idx;
-
+        if (item.id === state.lastAddedId) el.classList.add('fresh');
         el.onclick = () => handleItemClick(item.id);
-        container.appendChild(el);
+        custZone.appendChild(el);
       });
+
+      // Tu cambio: agrupado por valor (de mayor a menor) con contador ×N
+      const groups = {};
+      state.itemsOnTable.filter(i => i.owner === 'player').forEach(i => {
+        (groups[i.val] = groups[i.val] || []).push(i);
+      });
+      Object.keys(groups).map(Number).sort((a, b) => b - a).forEach(val => {
+        const list = groups[val];
+        const el = buildPiece(val, false, null);
+        if (list.length > 1) {
+          el.classList.add('stacked');
+          el.insertAdjacentHTML('beforeend', `<div class="count-badge">×${list.length}</div>`);
+        }
+        if (list.some(i => i.id === state.lastAddedId)) el.classList.add('fresh');
+        el.onclick = () => handleItemClick(list[list.length - 1].id);
+        playerZone.appendChild(el);
+      });
+      state.lastAddedId = null; // solo se anima la pieza recién puesta
     }
 
     function handleItemClick(id) {
@@ -696,16 +786,12 @@
       const item = state.itemsOnTable[idx];
 
       if (item.owner === 'customer') {
-        if (item.fake) {
-          showToast("⚠️ Billete sospechoso: compruébalo con LUZ UV.", "#ef4444");
-        }
-        state.collectedFromCustomer = +(state.collectedFromCustomer + item.val).toFixed(2);
-        state.itemsOnTable.splice(idx, 1);
+        state.collectedFromCustomer = round2(state.collectedFromCustomer + item.val);
         playTone(680, 'sine', 0.06);
       } else {
-        state.itemsOnTable.splice(idx, 1);
         playTone(420, 'sine', 0.06);
       }
+      state.itemsOnTable.splice(idx, 1);
       renderTable();
     }
 
@@ -735,59 +821,69 @@
       state.collectedFromCustomer = 0;
       state.itemsOnTable = [];
       state.hasFakeBill = false;
+      state.fakeVal = 0;
 
-      const prod = PRODUCTS[Math.floor(Math.random() * PRODUCTS.length)];
+      const prod = pick(PRODUCTS);
       state.currentProduct = prod;
 
-      document.getElementById('cust-avatar').textContent = AVATARS[Math.floor(Math.random() * AVATARS.length)];
+      document.getElementById('cust-avatar').textContent = pick(AVATARS);
       document.getElementById('prod-name').textContent = prod.name;
       document.getElementById('prod-price').textContent = fmt(prod.price);
 
       const roll = Math.random();
-      const bigBills = [20, 50, 100];
-      const bill = bigBills[Math.floor(Math.random() * bigBills.length)];
+      const bigBill = pick([20, 50, 100]);
+      let paid;
+      let extraSeconds = 0;
 
       if (roll < day.fakeChance) {
+        paid = bigBill;
         state.hasFakeBill = true;
-        document.getElementById('cust-speech').textContent = `Cóbrate ${prod.name} de este de ${bill} €, llevo prisa.`;
-        spawnItemOnTable(bill, 'customer', true);
+        state.fakeVal = paid;
+        spawnItemOnTable(paid, 'customer', true);
         if (state.upgrades.scanner) {
           setTimeout(() => playTone(1250, 'sine', 0.14, 0.15), 250);
         }
       } else if (roll < day.fakeChance + day.scamChance) {
-        document.getElementById('cust-speech').textContent = `Dame ${prod.name}, toma este billete de ${bill} €.`;
-        spawnItemOnTable(bill, 'customer', false);
-        scheduleScamTwist(bill, prod.price);
+        paid = bigBill;
+        spawnItemOnTable(paid, 'customer', false);
+        extraSeconds = 6; // tiempo extra para lidiar con el timador
+        scheduleScamTwist(paid);
       } else {
-        const pay = prod.price <= 2 ? [5, 10, 20][Math.floor(Math.random() * 3)] : [10, 20, 50][Math.floor(Math.random() * 3)];
-        document.getElementById('cust-speech').textContent = `Buenas, me llevo ${prod.name}. Aquí tienes ${pay} €.`;
-        spawnItemOnTable(pay, 'customer', false);
+        paid = prod.price <= 2 ? pick([5, 10, 20]) : pick([10, 20, 50]);
+        spawnItemOnTable(paid, 'customer', false);
       }
+      document.getElementById('cust-speech').textContent = pick(PAY_LINES)(prod.name, paid);
 
       updateHUD();
-      startTimer();
+      const seconds = day.baseTime + piecesFor(paid - prod.price) * SECONDS_PER_PIECE + extraSeconds;
+      startTimer(seconds);
     }
 
-    function scheduleScamTwist(initialBill, price) {
+    function scheduleScamTwist(initialBill) {
+      // Cuanto más avanzada la semana, antes salta el timo
+      const delay = 3600 - state.dayIdx * 250;
       state.scamTimerId = setTimeout(() => {
         if (!state.active) return;
-        const twistType = Math.random();
-
-        if (twistType < 0.52) {
-          const extraCoin = +(price % 1).toFixed(2) || 1;
+        if (Math.random() < 0.52) {
+          const extraCoin = pick([0.2, 0.5, 1, 2]); // monedas reales
           document.getElementById('cust-speech').textContent =
             `¡Espera! Tengo ${fmt(extraCoin)} sueltos, tómalos y devuélveme mejor el de ${initialBill} € que te di.`;
           spawnItemOnTable(extraCoin, 'customer', false);
-          triggerThiefHand();
         } else {
           document.getElementById('cust-speech').textContent =
             `Oye, ¿tienes bolsas de plástico ahí detrás? Mira a ver...`;
-          triggerThiefHand();
         }
-      }, 3100);
+        triggerThiefHand();
+      }, delay);
+    }
+
+    function clearHandTimers() {
+      state.handTimers.forEach(clearTimeout);
+      state.handTimers = [];
     }
 
     function triggerThiefHand() {
+      clearHandTimers();
       const hand = document.getElementById('thief-hand');
       hand.style.display = 'block';
       hand.className = 'tease';
@@ -797,26 +893,36 @@
       const teaseDelay = state.upgrades.camera ? 1550 : 1050;
       const grabDelay = state.upgrades.camera ? 1050 : 720;
 
-      setTimeout(() => {
+      state.handTimers.push(setTimeout(() => {
         if (!state.active || state.handState !== 'tease') return;
         hand.className = 'grab';
         state.handState = 'grab';
 
-        setTimeout(() => {
+        state.handTimers.push(setTimeout(() => {
           if (!state.active || state.handState !== 'grab') return;
           if (state.itemsOnTable.length > 0) {
-            state.itemsOnTable.sort((a, b) => b.val - a.val);
-            const stolen = state.itemsOnTable.shift();
+            // Se lleva la pieza más valiosa del mostrador
+            let best = 0;
+            state.itemsOnTable.forEach((it, i) => { if (it.val > state.itemsOnTable[best].val) best = i; });
+            const stolen = state.itemsOnTable.splice(best, 1)[0];
+            if (stolen.owner === 'player') {
+              // Era dinero de TU caja: se pierde de verdad
+              state.cash = round2(state.cash - stolen.val);
+              updateHUD();
+              showToast(`💸 ¡Te ha birlado ${fmt(stolen.val)} de tu cambio! (-${fmt(stolen.val)})`, '#ef4444');
+            } else {
+              showToast(`💸 ¡Ha recuperado su billete de ${fmt(stolen.val)} sin que lo cobraras!`, '#ef4444');
+            }
             renderTable();
-            showToast(`💸 ¡Te ha birlado ${fmt(stolen.val)} del mostrador!`, '#ef4444');
             playTone(140, 'sawtooth', 0.25);
           }
           hideHand();
-        }, grabDelay);
-      }, teaseDelay);
+        }, grabDelay));
+      }, teaseDelay));
     }
 
     function hideHand() {
+      clearHandTimers();
       const hand = document.getElementById('thief-hand');
       hand.style.display = 'none';
       hand.className = '';
@@ -833,18 +939,24 @@
       showToast("✋ ¡PLAF! Mano frenada a tiempo (+Racha)", "#10b981");
     };
 
-    function reportFake() {
-      if (!state.active) return;
+    function endClient() {
       state.active = false;
       clearInterval(state.timerId);
+      clearTimeout(state.scamTimerId);
+      hideHand();
+    }
+
+    function reportFake() {
+      if (!state.active) return;
+      endClient();
 
       if (state.hasFakeBill) {
-        state.cash += 5;
+        state.cash = round2(state.cash + 5);
         state.streak++;
         playTone(1040, 'triangle', 0.18);
         showToast("🕵️ ¡OJO CLÍNICO! Billete falso rechazado (+5,00 € bonus)", "#10b981");
       } else {
-        state.cash -= 10;
+        state.cash = round2(state.cash - 10);
         state.streak = 0;
         playTone(150, 'sawtooth', 0.25);
         showToast("❌ Ese billete era auténtico. El cliente se va enfadado (-10,00 €)", "#ef4444");
@@ -855,13 +967,11 @@
 
     function finishTransaction() {
       if (!state.active) return;
-      state.active = false;
-      clearInterval(state.timerId);
-      hideHand();
+      endClient();
 
       if (state.hasFakeBill) {
-        const fakeVal = state.itemsOnTable.find(i => i.fake)?.val || 20;
-        state.cash -= fakeVal;
+        const fakeVal = state.fakeVal || 20;
+        state.cash = round2(state.cash - fakeVal);
         state.streak = 0;
         playTone(130, 'sawtooth', 0.3);
         showToast(`🚨 ¡Te colaron un billete falso! Pierdes ${fmt(fakeVal)}`, "#ef4444");
@@ -878,54 +988,57 @@
         .filter(i => i.owner === 'player')
         .reduce((acc, i) => acc + i.val, 0);
 
-      const totalPaid = +(state.collectedFromCustomer + customerOnTable).toFixed(2);
-      const expectedChange = +(totalPaid - state.currentProduct.price).toFixed(2);
-      const diff = +(playerOnTable - expectedChange).toFixed(2);
+      const totalPaid = round2(state.collectedFromCustomer + customerOnTable);
+      const expectedChange = round2(totalPaid - state.currentProduct.price);
+      const diff = round2(playerOnTable - expectedChange);
 
       if (totalPaid < state.currentProduct.price) {
-        const loss = +(state.currentProduct.price - totalPaid + playerOnTable).toFixed(2);
-        state.cash -= loss;
+        const loss = round2(state.currentProduct.price - totalPaid + playerOnTable);
+        state.cash = round2(state.cash - loss);
         state.streak = 0;
         playTone(140, 'sawtooth', 0.25);
         showToast(`😱 ¡Te ha faltado dinero por cobrar! Descuadre de -${fmt(loss)}`, "#ef4444");
       } else if (Math.abs(diff) < 0.01) {
         const mult = state.upgrades.tipjar ? 2 : 1;
-        const tip = +((0.6 + state.streak * 0.25) * mult).toFixed(2);
-        state.cash += tip;
+        const tip = round2((0.6 + state.streak * 0.25) * mult);
+        state.cash = round2(state.cash + tip);
         state.streak++;
         playTone(880, 'sine', 0.14);
         showToast(`✅ ¡Cambio clavado al céntimo! +${fmt(tip)} de propina`, "#10b981");
       } else if (diff > 0) {
-        state.cash -= diff;
+        state.cash = round2(state.cash - diff);
         state.streak = 0;
         playTone(160, 'sawtooth', 0.25);
         showToast(`💸 ¡Le has dado ${fmt(diff)} de más! El timador sonríe...`, "#ef4444");
       } else {
         state.streak = 0;
         playTone(220, 'triangle', 0.2);
-        showToast(`🤨 Le diste ${fmt(Math.abs(diff))} de menos. Se va protestando.`, "#f59e0b");
+        showToast(`🤨 Le diste ${fmt(Math.abs(diff))} de menos (tocaba ${fmt(expectedChange)}). Se va protestando.`, "#f59e0b");
       }
 
       updateHUD();
       advanceTurn();
     }
 
-    function startTimer() {
+    function startTimer(seconds) {
       state.timeLeft = 100;
       const bar = document.getElementById('timer-bar');
-      const daySpeed = DAYS[state.dayIdx].speed;
-      const speed = state.upgrades.clock ? daySpeed * 0.75 : daySpeed;
+      bar.style.width = '100%';
+      bar.style.background = '#10b981';
+      if (state.relaxed) return; // sin reloj
+
+      const total = state.upgrades.clock ? seconds * 1.25 : seconds;
+      const step = 100 / (total * 10); // se descuenta cada 100 ms
 
       state.timerId = setInterval(() => {
         if (!state.active) return;
-        state.timeLeft -= speed;
+        state.timeLeft -= step;
         bar.style.width = Math.max(0, state.timeLeft) + '%';
         bar.style.background = state.timeLeft > 40 ? '#10b981' : (state.timeLeft > 20 ? '#f59e0b' : '#ef4444');
 
         if (state.timeLeft <= 0) {
-          state.active = false;
-          clearInterval(state.timerId);
-          state.cash -= 5;
+          endClient();
+          state.cash = round2(state.cash - 5);
           state.streak = 0;
           updateHUD();
           showToast("⏰ ¡Demasiado lento! El cliente se cansó (-5,00 €)", "#ef4444");

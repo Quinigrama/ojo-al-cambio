@@ -1,9 +1,12 @@
-const CACHE_NAME = 'ojo-al-cambio-v1.0.0';
+// Sube la versión cuando cambies algo para forzar la limpieza de la caché antigua
+const CACHE_NAME = 'ojo-al-cambio-v1.1.0';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './icon.svg'
+  './icon.svg',
+  './icon-192.png',
+  './icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -24,18 +27,34 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+function saveToCache(request, response) {
+  if (response && response.ok && new URL(request.url).origin === self.location.origin) {
+    const copy = response.clone();
+    caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+  }
+  return response;
+}
+
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
+  const req = event.request;
+  if (req.method !== 'GET') return;
+
+  // Página (HTML): primero la red, para que las actualizaciones lleguen siempre.
+  // Si no hay conexión, se usa la copia guardada.
+  if (req.mode === 'navigate' || req.destination === 'document') {
+    event.respondWith(
+      fetch(req)
+        .then((res) => saveToCache(req, res))
+        .catch(() => caches.match(req).then((c) => c || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // Resto (iconos, manifest): primero la caché, y se refresca en segundo plano.
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      return (
-        cached ||
-        fetch(event.request).then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          return response;
-        })
-      );
+    caches.match(req).then((cached) => {
+      const network = fetch(req).then((res) => saveToCache(req, res)).catch(() => cached);
+      return cached || network;
     })
   );
 });
