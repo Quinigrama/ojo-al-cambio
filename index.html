@@ -127,6 +127,20 @@
       line-height: 1.25;
     }
 
+    .speech-bubble.talking { outline: 3px solid #38bdf8; }
+    .speech-bubble b { color: #b45309; }
+    .pause-tag {
+      display: inline-block;
+      margin-left: 6px;
+      font-size: 0.68rem;
+      font-weight: 800;
+      color: #0369a1;
+      background: #e0f2fe;
+      border-radius: 6px;
+      padding: 1px 5px;
+      vertical-align: middle;
+    }
+
     .product-tag {
       background: #fef3c7;
       color: #92400e;
@@ -555,14 +569,15 @@
     }
 
     // baseTime = segundos base por cliente; además se suman segundos por cada pieza que necesite el cambio
+    // Probabilidades por cliente: falso → liante → timador → honrado (el resto)
     const DAYS = [
-      { name: "Lunes", desc: "Mañana tranquila de barrio", clients: 4, baseTime: 30, scamChance: 0.30, fakeChance: 0.15 },
-      { name: "Martes", desc: "Empiezan los billetes grandes", clients: 5, baseTime: 28, scamChance: 0.42, fakeChance: 0.20 },
-      { name: "Miércoles", desc: "Día de recados y prisas", clients: 6, baseTime: 26, scamChance: 0.50, fakeChance: 0.22 },
-      { name: "Jueves", desc: "Víspera animada", clients: 7, baseTime: 24, scamChance: 0.55, fakeChance: 0.25 },
-      { name: "Viernes", desc: "Hora punta de tarde", clients: 8, baseTime: 22, scamChance: 0.62, fakeChance: 0.28 },
-      { name: "Sábado", desc: "Mercadillo y gentío", clients: 9, baseTime: 20, scamChance: 0.68, fakeChance: 0.30 },
-      { name: "Domingo", desc: "Cierre semanal — Máxima tensión", clients: 10, baseTime: 18, scamChance: 0.75, fakeChance: 0.32 }
+      { name: "Lunes", desc: "Mañana tranquila de barrio", clients: 4, baseTime: 30, fakeChance: 0.15, lianteChance: 0.20, scamChance: 0.30 },
+      { name: "Martes", desc: "Empiezan los billetes grandes", clients: 5, baseTime: 28, fakeChance: 0.20, lianteChance: 0.22, scamChance: 0.35 },
+      { name: "Miércoles", desc: "Día de recados y prisas", clients: 6, baseTime: 26, fakeChance: 0.22, lianteChance: 0.24, scamChance: 0.38 },
+      { name: "Jueves", desc: "Víspera animada", clients: 7, baseTime: 24, fakeChance: 0.25, lianteChance: 0.25, scamChance: 0.40 },
+      { name: "Viernes", desc: "Hora punta de tarde", clients: 8, baseTime: 22, fakeChance: 0.28, lianteChance: 0.25, scamChance: 0.42 },
+      { name: "Sábado", desc: "Mercadillo y gentío", clients: 9, baseTime: 20, fakeChance: 0.30, lianteChance: 0.25, scamChance: 0.43 },
+      { name: "Domingo", desc: "Cierre semanal — Máxima tensión", clients: 10, baseTime: 18, fakeChance: 0.32, lianteChance: 0.25, scamChance: 0.43 }
     ];
     const SECONDS_PER_PIECE = 2.5;
     const DENOMS = [50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1];
@@ -627,6 +642,9 @@
       timeLeft: 100,
       timerId: null,
       scamTimerId: null,
+      clientTimers: [],
+      talkUntil: 0,
+      timerStep: 0,
       handTimers: [],
       currentProduct: null,
       collectedFromCustomer: 0,
@@ -695,6 +713,7 @@
             • <b>Cobra:</b> pincha los billetes y monedas del cliente para guardarlos.<br>
             • <b>Prepara el cambio:</b> toca tu cajón; las piezas iguales se apilan con un contador ×N.<br>
             • <b>Vigila sus manos:</b> si su mano entra a robar o dar el cambiazo, <b>pínchala rápido</b>.<br>
+            • <b>Ojo al liante:</b> hay clientes que, cuando ya estás contando, te sueltan monedas para que les des menos cambio. ¡Rehaz la cuenta! Mientras hablan, el reloj se para.<br>
             • <b>Anular venta:</b> si el cliente te la juega (recupera su billete, te lía con el cambio…), anula: le devuelves todo, no le das el producto y no pierdes nada. ¡Pero no anules a un cliente honrado!<br>
             • <b>Luz UV (tecla U):</b> los billetes buenos muestran la marca ★ EUR. Si no la tiene, ¡denúncialo!<br>
             • <b>Tiempo:</b> cuanto más cambio hay que dar, más tiempo tienes.
@@ -810,9 +829,50 @@
       playTone(300, 'sawtooth', 0.07);
     }
 
+    // El cliente habla: se muestra el texto y el reloj se para mientras dura la frase
+    function say(html) {
+      const bubble = document.getElementById('cust-speech');
+      const plain = html.replace(/<[^>]+>/g, '');
+      const ms = Math.min(4500, Math.max(1800, plain.length * 55));
+      state.talkUntil = Date.now() + ms;
+      bubble.innerHTML = html + (state.relaxed ? '' : '<span class="pause-tag">⏸ reloj parado</span>');
+      bubble.classList.add('talking');
+      clearTimeout(bubble._talk);
+      bubble._talk = setTimeout(() => {
+        bubble.classList.remove('talking');
+        const tag = bubble.querySelector('.pause-tag');
+        if (tag) tag.remove();
+      }, ms);
+    }
+
+    function later(fn, ms) {
+      state.clientTimers.push(setTimeout(fn, ms));
+    }
+    function clearClientTimers() {
+      state.clientTimers.forEach(clearTimeout);
+      state.clientTimers = [];
+    }
+
+    // Monedas reales para pagar una cantidad de céntimos (0,10 – 0,90)
+    function coinsFor(amount) {
+      let cents = Math.round(amount * 100);
+      const out = [];
+      for (const c of [200, 100, 50, 20, 10]) {
+        while (cents >= c) { out.push(c / 100); cents -= c; }
+      }
+      return out;
+    }
+
+    // Tiempo extra (en segundos) sin pasar del 100 % de la barra
+    function addTime(seconds) {
+      if (state.relaxed || !state.timerStep) return;
+      state.timeLeft = Math.min(100, state.timeLeft + seconds * 10 * state.timerStep);
+    }
+
     function nextClient() {
       clearInterval(state.timerId);
       clearTimeout(state.scamTimerId);
+      clearClientTimers();
       hideHand();
 
       if (state.uvOn) toggleUV();
@@ -846,7 +906,17 @@
         if (state.upgrades.scanner) {
           setTimeout(() => playTone(1250, 'sine', 0.14, 0.15), 250);
         }
-      } else if (roll < day.fakeChance + day.scamChance) {
+      } else if (roll < day.fakeChance + day.lianteChance) {
+        // Liante (honrado): paga con billete y luego suelta monedas para que le des menos cambio
+        const withCents = PRODUCTS.filter(p => Math.round(p.price * 100) % 100 !== 0);
+        const lp = pick(withCents);
+        state.currentProduct = lp;
+        document.getElementById('prod-name').textContent = lp.name;
+        document.getElementById('prod-price').textContent = fmt(lp.price);
+        paid = lp.price <= 2 ? pick([5, 10, 20]) : pick([10, 20, 50]);
+        spawnItemOnTable(paid, 'customer', false);
+        scheduleLiante(lp.price);
+      } else if (roll < day.fakeChance + day.lianteChance + day.scamChance) {
         paid = bigBill;
         state.isScammer = true;
         spawnItemOnTable(paid, 'customer', false);
@@ -856,11 +926,48 @@
         paid = prod.price <= 2 ? pick([5, 10, 20]) : pick([10, 20, 50]);
         spawnItemOnTable(paid, 'customer', false);
       }
-      document.getElementById('cust-speech').textContent = pick(PAY_LINES)(prod.name, paid);
+      const cp = state.currentProduct;
+      say(pick(PAY_LINES)(cp.name, paid));
 
       updateHUD();
-      const seconds = day.baseTime + piecesFor(paid - prod.price) * SECONDS_PER_PIECE + extraSeconds;
+      const seconds = day.baseTime + piecesFor(paid - cp.price) * SECONDS_PER_PIECE + extraSeconds;
       startTimer(seconds);
+    }
+
+    const LIANTE_FIRST = [
+      (x) => `¡Ah, espera, espera! Que tengo <b>${x}</b> sueltos, tómalos y así me das menos cambio.`,
+      (x) => `Uy, perdona, toma <b>${x}</b> más, que me quito suelto.`,
+      (x) => `¡Huy! Mira, te doy <b>${x}</b> y me das redondo, ¿vale?`
+    ];
+    const LIANTE_SECOND = [
+      (x) => `Y toma también <b>${x}</b>, que me pesa el monedero. ¿Te salen las cuentas?`,
+      (x) => `Bueno, y quédate con <b>${x}</b> más, que me sobra. ¡Ahora sí!`,
+      (x) => `Espera, espera… toma <b>${x}</b> también y ya está, de verdad.`
+    ];
+
+    function scheduleLiante(price) {
+      const cents = Math.round(price * 100) % 100;
+      // 1ª interrupción: llega cuando ya estás contando el cambio
+      later(() => {
+        if (!state.active) return;
+        const x = cents / 100;
+        coinsFor(x).forEach(c => spawnItemOnTable(c, 'customer', false));
+        say(pick(LIANTE_FIRST)(fmt(x)));
+        playTone(600, 'triangle', 0.08);
+        addTime(5);
+
+        // 2ª interrupción (desde el miércoles, a veces)
+        if (state.dayIdx >= 2 && Math.random() < 0.5) {
+          later(() => {
+            if (!state.active) return;
+            const y = pick([1, 2]);
+            spawnItemOnTable(y, 'customer', false);
+            say(pick(LIANTE_SECOND)(fmt(y)));
+            playTone(600, 'triangle', 0.08);
+            addTime(5);
+          }, 5000 + Math.random() * 2500);
+        }
+      }, 4200 + Math.random() * 2500);
     }
 
     function scheduleScamTwist(initialBill) {
@@ -870,12 +977,10 @@
         if (!state.active) return;
         if (Math.random() < 0.52) {
           const extraCoin = pick([0.2, 0.5, 1, 2]); // monedas reales
-          document.getElementById('cust-speech').textContent =
-            `¡Espera! Tengo ${fmt(extraCoin)} sueltos, tómalos y devuélveme mejor el de ${initialBill} € que te di.`;
+          say(`¡Espera! Tengo <b>${fmt(extraCoin)}</b> sueltos, tómalos y devuélveme mejor el de <b>${initialBill} €</b> que te di.`);
           spawnItemOnTable(extraCoin, 'customer', false);
         } else {
-          document.getElementById('cust-speech').textContent =
-            `Oye, ¿tienes bolsas de plástico ahí detrás? Mira a ver...`;
+          say(`Oye, ¿tienes bolsas de plástico ahí detrás? Mira a ver...`);
         }
         triggerThiefHand();
       }, delay);
@@ -939,7 +1044,7 @@
       state.streak++;
       updateHUD();
       playTone(920, 'square', 0.08);
-      document.getElementById('cust-speech').textContent = "¡Ay! Perdona, creía que ese billete era el mío...";
+      say("¡Ay! Perdona, creía que ese billete era el mío...");
       showToast("✋ ¡PLAF! Mano frenada a tiempo (+Racha)", "#10b981");
     };
 
@@ -947,6 +1052,7 @@
       state.active = false;
       clearInterval(state.timerId);
       clearTimeout(state.scamTimerId);
+      clearClientTimers();
       hideHand();
     }
 
@@ -1056,9 +1162,16 @@
 
       const total = state.upgrades.clock ? seconds * 1.25 : seconds;
       const step = 100 / (total * 10); // se descuenta cada 100 ms
+      state.timerStep = step;
 
       state.timerId = setInterval(() => {
         if (!state.active) return;
+        if (Date.now() < state.talkUntil) {
+          // El cliente está hablando: reloj parado
+          bar.style.width = Math.max(0, state.timeLeft) + '%';
+          bar.style.background = '#38bdf8';
+          return;
+        }
         state.timeLeft -= step;
         bar.style.width = Math.max(0, state.timeLeft) + '%';
         bar.style.background = state.timeLeft > 40 ? '#10b981' : (state.timeLeft > 20 ? '#f59e0b' : '#ef4444');
