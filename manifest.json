@@ -1,0 +1,20 @@
+{
+  "name": "Ojo al Cambio — Simulador de Mostrador",
+  "short_name": "Ojo al Cambio",
+  "description": "Juego arcade de cálculo rápido y reflejos contra el timo del cambio corto, manos largas y billetes falsos.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14171a",
+  "theme_color": "#14171a",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#14171a" />
+  <meta name="description" content="Juego arcade de matemáticas rápidas y reflejos detrás del mostrador contra el timo del cambio." />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="apple-touch-icon" href="./icon.svg" />
+  <title>OJO AL CAMBIO — Simulador de Mostrador</title>
+  <style>
+    :root {
+      --bg-dark: #14171a;
+      --felt: #1e4d3b;
+      --wood: #5c3a21;
+      --wood-dark: #3d2514;
+      --panel: #22272e;
+      --accent: #f59e0b;
+      --danger: #ef4444;
+      --success: #10b981;
+      --uv-glow: #a855f7;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg-dark);
+      color: #f3f4f6;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    header {
+      background: var(--panel);
+      padding: 8px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #30363d;
+      font-size: 0.85rem;
+      z-index: 20;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .stat-box {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .badge {
+      background: #111418;
+      padding: 4px 9px;
+      border-radius: 6px;
+      border: 1px solid #374151;
+      font-weight: 700;
+    }
+
+    .badge span { color: var(--accent); }
+    .badge.money span { color: var(--success); }
+    .badge.day span { color: #38bdf8; }
+
+    #timer-bar-wrap {
+      width: 100%;
+      height: 6px;
+      background: #111;
+    }
+    #timer-bar {
+      height: 100%;
+      width: 100%;
+      background: var(--success);
+      transition: width 0.1s linear, background 0.3s;
+    }
+
+    #customer-area {
+      background: linear-gradient(180deg, #1b2028 0%, #262d38 100%);
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 4px solid var(--wood-dark);
+      min-height: 84px;
+      position: relative;
+      z-index: 10;
+    }
+
+    .customer-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      max-width: 72%;
+    }
+
+    .avatar {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: #374151;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.65rem;
+      border: 2px solid #6b7280;
+      flex-shrink: 0;
+    }
+
+    .speech-bubble {
+      background: #fff;
+      color: #111827;
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      line-height: 1.25;
+    }
+
+    .product-tag {
+      background: #fef3c7;
+      color: #92400e;
+      border: 2px dashed #f59e0b;
+      padding: 6px 10px;
+      border-radius: 8px;
+      text-align: center;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+    .product-tag small {
+      display: block;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      opacity: 0.8;
+    }
+
+    #counter {
+      flex: 1;
+      background: radial-gradient(circle at center, #25614a 0%, var(--felt) 100%);
+      border-left: 10px solid var(--wood);
+      border-right: 10px solid var(--wood);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 10px;
+      transition: filter 0.25s, box-shadow 0.25s;
+    }
+
+    #counter.uv-active {
+      background: radial-gradient(circle at center, #2e1065 0%, #170836 100%);
+      box-shadow: inset 0 0 60px rgba(168, 85, 247, 0.65);
+    }
+
+    .zone-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: rgba(255,255,255,0.45);
+      pointer-events: none;
+    }
+
+    #table-items {
+      position: absolute;
+      inset: 0;
+    }
+
+    .money-item {
+      position: absolute;
+      cursor: pointer;
+      transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), left 0.35s ease, top 0.35s ease;
+      box-shadow: 0 6px 12px rgba(0,0,0,0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+    }
+
+    .money-item:hover {
+      transform: scale(1.08) translateY(-4px) !important;
+      z-index: 50 !important;
+    }
+
+    .bill {
+      width: 102px;
+      height: 52px;
+      border-radius: 5px;
+      border: 2px solid rgba(255,255,255,0.4);
+      font-size: 1.12rem;
+      color: #111;
+      text-shadow: 0 1px 0 rgba(255,255,255,0.5);
+    }
+
+    .bill[data-val="5"]   { background: linear-gradient(135deg, #cbd5e1, #94a3b8); }
+    .bill[data-val="10"]  { background: linear-gradient(135deg, #fca5a5, #f87171); }
+    .bill[data-val="20"]  { background: linear-gradient(135deg, #93c5fd, #60a5fa); }
+    .bill[data-val="50"]  { background: linear-gradient(135deg, #fdba74, #fb923c); }
+    .bill[data-val="100"] { background: linear-gradient(135deg, #86efac, #4ade80); }
+
+    .uv-mark {
+      display: none;
+      position: absolute;
+      inset: 4px;
+      border: 2px dashed #38bdf8;
+      border-radius: 3px;
+      pointer-events: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 6px;
+      font-size: 0.72rem;
+      color: #e0f2fe;
+      text-shadow: 0 0 8px #38bdf8;
+    }
+
+    #counter.uv-active .bill.authentic .uv-mark { display: flex; }
+    #counter.uv-active .bill.fake {
+      filter: brightness(0.65) contrast(1.2);
+      border-color: #ef4444;
+    }
+
+    .coin {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      font-size: 0.76rem;
+      border: 2px solid rgba(0,0,0,0.35);
+    }
+    .coin.gold { background: radial-gradient(circle at 30% 30%, #fde047, #ca8a04); color: #422006; }
+    .coin.silver { background: radial-gradient(circle at 30% 30%, #f1f5f9, #94a3b8); color: #0f172a; }
+    .coin.copper { background: radial-gradient(circle at 30% 30%, #fdba74, #b45309); color: #fff; }
+
+    .owner-badge {
+      position: absolute;
+      top: -8px;
+      right: -6px;
+      font-size: 0.6rem;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #111827;
+      color: #fff;
+      border: 1px solid #4b5563;
+    }
+
+    #thief-hand {
+      position: absolute;
+      top: -110px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 3.4rem;
+      cursor: pointer;
+      z-index: 80;
+      filter: drop-shadow(0 8px 10px rgba(0,0,0,0.6));
+      transition: top 0.35s ease, left 0.35s ease, transform 0.15s;
+      display: none;
+    }
+    #thief-hand.tease { top: -18px; animation: pulseHand 0.35s infinite alternate; }
+    #thief-hand.grab { top: 38%; }
+
+    @keyframes pulseHand {
+      from { transform: translateX(-50%) scale(1); }
+      to { transform: translateX(-50%) scale(1.12); }
+    }
+
+    #register-area {
+      background: var(--wood-dark);
+      border-top: 4px solid var(--wood);
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 20;
+    }
+
+    .controls-row {
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: none;
+      border-radius: 8px;
+      padding: 9px 13px;
+      font-weight: 800;
+      font-size: 0.84rem;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.15s;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-uv { background: #4c1d95; color: #f3e8ff; border: 1px solid #a855f7; }
+    .btn-uv.active { background: #9333ea; box-shadow: 0 0 14px #a855f7; }
+    .btn-fake { background: #dc2626; color: #fff; }
+    .btn-done { background: #10b981; color: #052e16; font-size: 0.94rem; padding: 10px 16px; }
+    .btn-install { background: #2563eb; color: #fff; margin-top: 8px; width: 100%; display: none; }
+
+    .drawer {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+    }
+
+    .drawer-slot {
+      background: #1f2937;
+      border: 1px solid #4b5563;
+      border-radius: 6px;
+      padding: 7px 4px;
+      text-align: center;
+      font-weight: 800;
+      font-size: 0.84rem;
+      cursor: pointer;
+      color: #f9fafb;
+    }
+    .drawer-slot:hover { background: #374151; }
+    .drawer-slot.bill-slot { border-bottom: 3px solid #f59e0b; }
+    .drawer-slot.coin-slot { border-bottom: 3px solid #9ca3af; }
+
+    #toast {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(17, 24, 39, 0.95);
+      padding: 14px 22px;
+      border-radius: 12px;
+      font-weight: 800;
+      font-size: 1.05rem;
+      border: 2px solid var(--accent);
+      z-index: 150;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s;
+      text-align: center;
+      max-width: 88%;
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 12, 16, 0.93);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 16px;
+      overflow-y: auto;
+    }
+
+    .modal {
+      background: #1f242d;
+      border: 2px solid var(--accent);
+      border-radius: 14px;
+      max-width: 490px;
+      width: 100%;
+      padding: 22px;
+      text-align: center;
+    }
+    .modal h1 { margin: 0 0 8px; color: var(--accent); font-size: 1.6rem; }
+    .modal p { color: #d1d5db; font-size: 0.9rem; line-height: 1.45; margin: 6px 0; }
+
+    .records-bar {
+      display: flex;
+      justify-content: space-around;
+      background: #14181f;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      padding: 8px;
+      margin: 12px 0;
+      font-size: 0.85rem;
+    }
+    .records-bar b { color: var(--success); display: block; font-size: 1.05rem; }
+
+    .rules-list {
+      text-align: left;
+      background: #14181f;
+      padding: 11px 14px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      margin: 12px 0;
+      line-height: 1.5;
+    }
+
+    .shop-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 14px 0;
+      text-align: left;
+    }
+
+    .shop-card {
+      background: #14181f;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 6px;
+    }
+    .shop-card.owned { border-color: var(--success); opacity: 0.8; }
+    .shop-card h4 { margin: 0; font-size: 0.86rem; color: #f9fafb; }
+    .shop-card small { font-size: 0.74rem; color: #9ca3af; line-height: 1.3; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="stat-box">
+      <div class="badge day">Día: <span id="hud-day">Lunes</span></div>
+      <div class="badge money">Caja: <span id="hud-cash">200,00 €</span></div>
+    </div>
+    <div class="stat-box">
+      <div class="badge">Turno: <span id="hud-client">1/4</span></div>
+      <div class="badge">Racha: <span id="hud-streak">0</span></div>
+    </div>
+  </header>
+
+  <div id="timer-bar-wrap"><div id="timer-bar"></div></div>
+
+  <section id="customer-area">
+    <div class="customer-info">
+      <div class="avatar" id="cust-avatar">🧔</div>
+      <div class="speech-bubble" id="cust-speech">Preparando mostrador...</div>
+    </div>
+    <div class="product-tag">
+      <small id="prod-name">Producto</small>
+      <span id="prod-price">0,00 €</span>
+    </div>
+  </section>
+
+  <main id="counter">
+    <div class="zone-label">▲ Lado del Cliente (Pincha sus billetes para guardarlos en tu caja)</div>
+    <div id="table-items"></div>
+    <div id="thief-hand" title="¡Pincha su mano para frenarlo!">🖐️</div>
+    <div class="zone-label" style="text-align:right;">▼ Tu Cambio en Mesa (Pincha para devolverlo a tu cajón)</div>
+  </main>
+
+  <section id="register-area">
+    <div class="controls-row">
+      <button class="btn btn-uv" id="btn-uv" onclick="toggleUV()">🔦 LUZ UV (U)</button>
+      <button class="btn btn-fake" onclick="reportFake()">🚫 ¡BILLETE FALSO!</button>
+      <button class="btn btn-done" onclick="finishTransaction()">✅ CERRAR VENTA</button>
+    </div>
+
+    <div class="drawer">
+      <div class="drawer-slot bill-slot" onclick="addChange(50)">50 €</div>
+      <div class="drawer-slot bill-slot" onclick="addChange(20)">20 €</div>
+      <div class="drawer-slot bill-slot" onclick="addChange(10)">10 €</div>
+      <div class="drawer-slot bill-slot" onclick="addChange(5)">5 €</div>
+      <div class="drawer-slot coin-slot" onclick="addChange(2)">2 €</div>
+      <div class="drawer-slot coin-slot" onclick="addChange(1)">1 €</div>
+      <div class="drawer-slot coin-slot" onclick="addChange(0.5)">0,50 €</div>
+      <div class="drawer-slot coin-slot" onclick="addChange(0.2)">0,20 €</div>
+      <div class="drawer-slot coin-slot" onclick="addChange(0.1)">0,10 €</div>
+      <div class="drawer-slot coin-slot" onclick="clearMyChange()" style="background:#3f1d1d;">Limpiar</div>
+    </div>
+  </section>
+
+  <div id="toast"></div>
+  <div id="overlay"></div>
+
+  <script>
+    // Registro del Service Worker para funcionamiento Offline / PWA
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+
+    let deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      const btn = document.getElementById('btn-install-app');
+      if (btn) btn.style.display = 'block';
+    });
+
+    function installPWA() {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.finally(() => {
+        deferredPrompt = null;
+        const btn = document.getElementById('btn-install-app');
+        if (btn) btn.style.display = 'none';
+      });
+    }
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playTone(freq, type = 'sine', dur = 0.09, vol = 0.12) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + dur);
+    }
+
+    const DAYS = [
+      { name: "Lunes", desc: "Mañana tranquila de barrio", clients: 4, speed: 0.48, scamChance: 0.30, fakeChance: 0.15 },
+      { name: "Martes", desc: "Empiezan los billetes grandes", clients: 5, speed: 0.56, scamChance: 0.42, fakeChance: 0.20 },
+      { name: "Miércoles", desc: "Día de recados y prisas", clients: 6, speed: 0.64, scamChance: 0.50, fakeChance: 0.22 },
+      { name: "Jueves", desc: "Víspera animada", clients: 7, speed: 0.72, scamChance: 0.55, fakeChance: 0.25 },
+      { name: "Viernes", desc: "Hora punta de tarde", clients: 8, speed: 0.82, scamChance: 0.62, fakeChance: 0.28 },
+      { name: "Sábado", desc: "Mercadillo y gentío", clients: 9, speed: 0.90, scamChance: 0.68, fakeChance: 0.30 },
+      { name: "Domingo", desc: "Cierre semanal — Máxima tensión", clients: 10, speed: 1.00, scamChance: 0.75, fakeChance: 0.32 }
+    ];
+
+    const UPGRADES = [
+      { id: "camera", name: "📹 Cámara HD", cost: 35, desc: "Frena un 35% la mano del timador." },
+      { id: "clock", name: "🕰️ Reloj Tranquilo", cost: 40, desc: "+25% de tiempo extra por cliente." },
+      { id: "scanner", name: "📡 Alerta UV", cost: 55, desc: "Pitido sutil si entra un billete falso." },
+      { id: "tipjar", name: "🫙 Bote Deluxe", cost: 30, desc: "Duplica las propinas por cambio exacto." }
+    ];
+
+    const PRODUCTS = [
+      { name: "Chicle", price: 1.20 },
+      { name: "Periódico", price: 1.80 },
+      { name: "Botella Agua", price: 1.50 },
+      { name: "Mechero", price: 2.00 },
+      { name: "Pilas AAA", price: 3.50 },
+      { name: "Cafecito", price: 1.40 },
+      { name: "Pan y Bollo", price: 2.60 },
+      { name: "Refresco", price: 2.30 }
+    ];
+
+    const AVATARS = ["🧔", "🕵️", "👩‍🦱", "🧓", "👱‍♂️", "🧕", "🧢", "🕶️"];
+
+    const STORAGE_KEY = "ojo_al_cambio_records_v1";
+    function getRecords() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || { bestCash: 200, bestStreak: 0, weeksWon: 0 };
+      } catch {
+        return { bestCash: 200, bestStreak: 0, weeksWon: 0 };
+      }
+    }
+    function saveRecords(cash, streak, weekCompleted = false) {
+      const rec = getRecords();
+      if (cash > rec.bestCash) rec.bestCash = +cash.toFixed(2);
+      if (streak > rec.bestStreak) rec.bestStreak = streak;
+      if (weekCompleted) rec.weeksWon += 1;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(rec));
+    }
+
+    let state = {
+      cash: 200.00,
+      dayStartCash: 200.00,
+      streak: 0,
+      dayIdx: 0,
+      clientInDay: 0,
+      upgrades: {},
+      uvOn: false,
+      active: false,
+      timeLeft: 100,
+      timerId: null,
+      scamTimerId: null,
+      currentProduct: null,
+      collectedFromCustomer: 0,
+      itemsOnTable: [],
+      hasFakeBill: false,
+      handState: 'hidden'
+    };
+
+    const fmt = (n) => n.toFixed(2).replace('.', ',') + ' €';
+
+    function showToast(msg, color = '#f59e0b') {
+      const t = document.getElementById('toast');
+      t.innerHTML = msg;
+      t.style.borderColor = color;
+      t.style.opacity = '1';
+      clearTimeout(t._hide);
+      t._hide = setTimeout(() => { t.style.opacity = '0'; }, 1800);
+    }
+
+    function updateHUD() {
+      const day = DAYS[state.dayIdx];
+      document.getElementById('hud-day').textContent = day.name;
+      document.getElementById('hud-cash').textContent = fmt(state.cash);
+      document.getElementById('hud-streak').textContent = state.streak;
+      document.getElementById('hud-client').textContent = `${state.clientInDay}/${day.clients}`;
+    }
+
+    function toggleUV() {
+      state.uvOn = !state.uvOn;
+      document.getElementById('counter').classList.toggle('uv-active', state.uvOn);
+      document.getElementById('btn-uv').classList.toggle('active', state.uvOn);
+      playTone(state.uvOn ? 520 : 280, 'triangle', 0.08);
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() === 'u' && state.active) toggleUV();
+    });
+
+    function showStartModal() {
+      const rec = getRecords();
+      const ov = document.getElementById('overlay');
+      ov.innerHTML = `
+        <div class="modal">
+          <h1>👁️ OJO AL CAMBIO</h1>
+          <p>Sobrevive a una semana completa detrás del mostrador sin que te descuadren la caja.</p>
+          <div class="records-bar">
+            <div>Récord Caja<b>${fmt(rec.bestCash)}</b></div>
+            <div>Mejor Racha<b>${rec.bestStreak}</b></div>
+            <div>Semanas<b>${rec.weeksWon}</b></div>
+          </div>
+          <div class="rules-list">
+            • <b>Recoge su dinero:</b> Pincha en los billetes/monedas del cliente para guardarlos.<br>
+            • <b>Prepara el cambio:</b> Toca tu cajón inferior para colocar billetes y monedas.<br>
+            • <b>Vigila sus manos:</b> Si su mano entra a robar o dar el cambiazo, <b>pínchala rápido</b>.<br>
+            • <b>Luz UV (Tecla U):</b> Detecta billetes falsos antes de cerrar la venta.
+          </div>
+          <button class="btn btn-done" style="width:100%; font-size:1.05rem;" onclick="startNewWeek()">EMPEZAR LUNES</button>
+          <button id="btn-install-app" class="btn btn-install" style="${deferredPrompt ? 'display:block' : 'display:none'}" onclick="installPWA()">📲 INSTALAR APP EN DISPOSITIVO</button>
+        </div>
+      `;
+      ov.style.display = 'flex';
+    }
+
+    function startNewWeek() {
+      state.cash = 200;
+      state.dayStartCash = 200;
+      state.streak = 0;
+      state.dayIdx = 0;
+      state.clientInDay = 0;
+      state.upgrades = {};
+      document.getElementById('overlay').style.display = 'none';
+      nextClient();
+    }
+
+    function spawnItemOnTable(val, owner, fake = false) {
+      const id = 'item_' + Math.random().toString(36).slice(2, 9);
+      const isCustomer = owner === 'customer';
+      const x = 14 + Math.random() * 64;
+      const y = isCustomer ? (16 + Math.random() * 22) : (54 + Math.random() * 22);
+      const rot = (Math.random() * 18 - 9).toFixed(1);
+      state.itemsOnTable.push({ id, val, owner, fake, x, y, rot });
+      renderTable();
+    }
+
+    function renderTable() {
+      const container = document.getElementById('table-items');
+      container.innerHTML = '';
+
+      state.itemsOnTable.forEach((item, idx) => {
+        const el = document.createElement('div');
+        const isBill = item.val >= 5;
+        el.className = 'money-item ' + (isBill ? 'bill' : 'coin');
+        if (isBill) {
+          el.dataset.val = item.val;
+          el.classList.add(item.fake ? 'fake' : 'authentic');
+          el.innerHTML = `
+            <span>${item.val} €</span>
+            <div class="uv-mark"><span>★ EUR</span><span>OK</span></div>
+            <div class="owner-badge">${item.owner === 'customer' ? 'Cliente' : 'Tu cambio'}</div>
+          `;
+        } else {
+          const coinType = item.val >= 1 ? 'gold' : (item.val >= 0.2 ? 'silver' : 'copper');
+          el.classList.add(coinType);
+          el.innerHTML = `
+            <span>${item.val >= 1 ? item.val + '€' : Math.round(item.val * 100) + 'c'}</span>
+            <div class="owner-badge">${item.owner === 'customer' ? 'Cli' : 'Tú'}</div>
+          `;
+        }
+
+        el.style.left = item.x + '%';
+        el.style.top = item.y + '%';
+        el.style.transform = `rotate(${item.rot}deg)`;
+        el.style.zIndex = 10 + idx;
+
+        el.onclick = () => handleItemClick(item.id);
+        container.appendChild(el);
+      });
+    }
+
+    function handleItemClick(id) {
+      if (!state.active) return;
+      const idx = state.itemsOnTable.findIndex(i => i.id === id);
+      if (idx === -1) return;
+      const item = state.itemsOnTable[idx];
+
+      if (item.owner === 'customer') {
+        if (item.fake) {
+          showToast("⚠️ Billete sospechoso: compruébalo con LUZ UV.", "#ef4444");
+        }
+        state.collectedFromCustomer = +(state.collectedFromCustomer + item.val).toFixed(2);
+        state.itemsOnTable.splice(idx, 1);
+        playTone(680, 'sine', 0.06);
+      } else {
+        state.itemsOnTable.splice(idx, 1);
+        playTone(420, 'sine', 0.06);
+      }
+      renderTable();
+    }
+
+    function addChange(val) {
+      if (!state.active) return;
+      spawnItemOnTable(val, 'player', false);
+      playTone(val >= 5 ? 580 : 880, 'triangle', 0.05);
+    }
+
+    function clearMyChange() {
+      if (!state.active) return;
+      state.itemsOnTable = state.itemsOnTable.filter(i => i.owner !== 'player');
+      renderTable();
+      playTone(300, 'sawtooth', 0.07);
+    }
+
+    function nextClient() {
+      clearInterval(state.timerId);
+      clearTimeout(state.scamTimerId);
+      hideHand();
+
+      if (state.uvOn) toggleUV();
+
+      const day = DAYS[state.dayIdx];
+      state.clientInDay++;
+      state.active = true;
+      state.collectedFromCustomer = 0;
+      state.itemsOnTable = [];
+      state.hasFakeBill = false;
+
+      const prod = PRODUCTS[Math.floor(Math.random() * PRODUCTS.length)];
+      state.currentProduct = prod;
+
+      document.getElementById('cust-avatar').textContent = AVATARS[Math.floor(Math.random() * AVATARS.length)];
+      document.getElementById('prod-name').textContent = prod.name;
+      document.getElementById('prod-price').textContent = fmt(prod.price);
+
+      const roll = Math.random();
+      const bigBills = [20, 50, 100];
+      const bill = bigBills[Math.floor(Math.random() * bigBills.length)];
+
+      if (roll < day.fakeChance) {
+        state.hasFakeBill = true;
+        document.getElementById('cust-speech').textContent = `Cóbrate ${prod.name} de este de ${bill} €, llevo prisa.`;
+        spawnItemOnTable(bill, 'customer', true);
+        if (state.upgrades.scanner) {
+          setTimeout(() => playTone(1250, 'sine', 0.14, 0.15), 250);
+        }
+      } else if (roll < day.fakeChance + day.scamChance) {
+        document.getElementById('cust-speech').textContent = `Dame ${prod.name}, toma este billete de ${bill} €.`;
+        spawnItemOnTable(bill, 'customer', false);
+        scheduleScamTwist(bill, prod.price);
+      } else {
+        const pay = prod.price <= 2 ? [5, 10, 20][Math.floor(Math.random() * 3)] : [10, 20, 50][Math.floor(Math.random() * 3)];
+        document.getElementById('cust-speech').textContent = `Buenas, me llevo ${prod.name}. Aquí tienes ${pay} €.`;
+        spawnItemOnTable(pay, 'customer', false);
+      }
+
+      updateHUD();
+      startTimer();
+    }
+
+    function scheduleScamTwist(initialBill, price) {
+      state.scamTimerId = setTimeout(() => {
+        if (!state.active) return;
+        const twistType = Math.random();
+
+        if (twistType < 0.52) {
+          const extraCoin = +(price % 1).toFixed(2) || 1;
+          document.getElementById('cust-speech').textContent =
+            `¡Espera! Tengo ${fmt(extraCoin)} sueltos, tómalos y devuélveme mejor el de ${initialBill} € que te di.`;
+          spawnItemOnTable(extraCoin, 'customer', false);
+          triggerThiefHand();
+        } else {
+          document.getElementById('cust-speech').textContent =
+            `Oye, ¿tienes bolsas de plástico ahí detrás? Mira a ver...`;
+          triggerThiefHand();
+        }
+      }, 3100);
+    }
+
+    function triggerThiefHand() {
+      const hand = document.getElementById('thief-hand');
+      hand.style.display = 'block';
+      hand.className = 'tease';
+      state.handState = 'tease';
+      playTone(220, 'sawtooth', 0.12);
+
+      const teaseDelay = state.upgrades.camera ? 1550 : 1050;
+      const grabDelay = state.upgrades.camera ? 1050 : 720;
+
+      setTimeout(() => {
+        if (!state.active || state.handState !== 'tease') return;
+        hand.className = 'grab';
+        state.handState = 'grab';
+
+        setTimeout(() => {
+          if (!state.active || state.handState !== 'grab') return;
+          if (state.itemsOnTable.length > 0) {
+            state.itemsOnTable.sort((a, b) => b.val - a.val);
+            const stolen = state.itemsOnTable.shift();
+            renderTable();
+            showToast(`💸 ¡Te ha birlado ${fmt(stolen.val)} del mostrador!`, '#ef4444');
+            playTone(140, 'sawtooth', 0.25);
+          }
+          hideHand();
+        }, grabDelay);
+      }, teaseDelay);
+    }
+
+    function hideHand() {
+      const hand = document.getElementById('thief-hand');
+      hand.style.display = 'none';
+      hand.className = '';
+      state.handState = 'hidden';
+    }
+
+    document.getElementById('thief-hand').onclick = () => {
+      if (!state.active || state.handState === 'hidden') return;
+      hideHand();
+      state.streak++;
+      updateHUD();
+      playTone(920, 'square', 0.08);
+      document.getElementById('cust-speech').textContent = "¡Ay! Perdona, creía que ese billete era el mío...";
+      showToast("✋ ¡PLAF! Mano frenada a tiempo (+Racha)", "#10b981");
+    };
+
+    function reportFake() {
+      if (!state.active) return;
+      state.active = false;
+      clearInterval(state.timerId);
+
+      if (state.hasFakeBill) {
+        state.cash += 5;
+        state.streak++;
+        playTone(1040, 'triangle', 0.18);
+        showToast("🕵️ ¡OJO CLÍNICO! Billete falso rechazado (+5,00 € bonus)", "#10b981");
+      } else {
+        state.cash -= 10;
+        state.streak = 0;
+        playTone(150, 'sawtooth', 0.25);
+        showToast("❌ Ese billete era auténtico. El cliente se va enfadado (-10,00 €)", "#ef4444");
+      }
+      updateHUD();
+      advanceTurn();
+    }
+
+    function finishTransaction() {
+      if (!state.active) return;
+      state.active = false;
+      clearInterval(state.timerId);
+      hideHand();
+
+      if (state.hasFakeBill) {
+        const fakeVal = state.itemsOnTable.find(i => i.fake)?.val || 20;
+        state.cash -= fakeVal;
+        state.streak = 0;
+        playTone(130, 'sawtooth', 0.3);
+        showToast(`🚨 ¡Te colaron un billete falso! Pierdes ${fmt(fakeVal)}`, "#ef4444");
+        updateHUD();
+        advanceTurn();
+        return;
+      }
+
+      const customerOnTable = state.itemsOnTable
+        .filter(i => i.owner === 'customer')
+        .reduce((acc, i) => acc + i.val, 0);
+
+      const playerOnTable = state.itemsOnTable
+        .filter(i => i.owner === 'player')
+        .reduce((acc, i) => acc + i.val, 0);
+
+      const totalPaid = +(state.collectedFromCustomer + customerOnTable).toFixed(2);
+      const expectedChange = +(totalPaid - state.currentProduct.price).toFixed(2);
+      const diff = +(playerOnTable - expectedChange).toFixed(2);
+
+      if (totalPaid < state.currentProduct.price) {
+        const loss = +(state.currentProduct.price - totalPaid + playerOnTable).toFixed(2);
+        state.cash -= loss;
+        state.streak = 0;
+        playTone(140, 'sawtooth', 0.25);
+        showToast(`😱 ¡Te ha faltado dinero por cobrar! Descuadre de -${fmt(loss)}`, "#ef4444");
+      } else if (Math.abs(diff) < 0.01) {
+        const mult = state.upgrades.tipjar ? 2 : 1;
+        const tip = +((0.6 + state.streak * 0.25) * mult).toFixed(2);
+        state.cash += tip;
+        state.streak++;
+        playTone(880, 'sine', 0.14);
+        showToast(`✅ ¡Cambio clavado al céntimo! +${fmt(tip)} de propina`, "#10b981");
+      } else if (diff > 0) {
+        state.cash -= diff;
+        state.streak = 0;
+        playTone(160, 'sawtooth', 0.25);
+        showToast(`💸 ¡Le has dado ${fmt(diff)} de más! El timador sonríe...`, "#ef4444");
+      } else {
+        state.streak = 0;
+        playTone(220, 'triangle', 0.2);
+        showToast(`🤨 Le diste ${fmt(Math.abs(diff))} de menos. Se va protestando.`, "#f59e0b");
+      }
+
+      updateHUD();
+      advanceTurn();
+    }
+
+    function startTimer() {
+      state.timeLeft = 100;
+      const bar = document.getElementById('timer-bar');
+      const daySpeed = DAYS[state.dayIdx].speed;
+      const speed = state.upgrades.clock ? daySpeed * 0.75 : daySpeed;
+
+      state.timerId = setInterval(() => {
+        if (!state.active) return;
+        state.timeLeft -= speed;
+        bar.style.width = Math.max(0, state.timeLeft) + '%';
+        bar.style.background = state.timeLeft > 40 ? '#10b981' : (state.timeLeft > 20 ? '#f59e0b' : '#ef4444');
+
+        if (state.timeLeft <= 0) {
+          state.active = false;
+          clearInterval(state.timerId);
+          state.cash -= 5;
+          state.streak = 0;
+          updateHUD();
+          showToast("⏰ ¡Demasiado lento! El cliente se cansó (-5,00 €)", "#ef4444");
+          advanceTurn();
+        }
+      }, 100);
+    }
+
+    function advanceTurn() {
+      saveRecords(state.cash, state.streak, false);
+
+      if (state.cash <= 0) {
+        setTimeout(() => {
+          const ov = document.getElementById('overlay');
+          ov.innerHTML = `
+            <div class="modal">
+              <h1 style="color:#ef4444;">💥 CAJA ARRUINADA</h1>
+              <p>Te han dejado la caja en números rojos el <b>${DAYS[state.dayIdx].name}</b>.</p>
+              <button class="btn btn-done" style="width:100%; margin-top:12px;" onclick="showStartModal()">VOLVER AL MENÚ</button>
+            </div>
+          `;
+          ov.style.display = 'flex';
+        }, 1600);
+        return;
+      }
+
+      const day = DAYS[state.dayIdx];
+      if (state.clientInDay >= day.clients) {
+        setTimeout(showEndOfDayShop, 1650);
+      } else {
+        setTimeout(nextClient, 1700);
+      }
+    }
+
+    function showEndOfDayShop() {
+      const day = DAYS[state.dayIdx];
+      const profit = +(state.cash - state.dayStartCash).toFixed(2);
+
+      if (state.dayIdx >= DAYS.length - 1) {
+        saveRecords(state.cash, state.streak, true);
+        const ov = document.getElementById('overlay');
+        ov.innerHTML = `
+          <div class="modal">
+            <h1 style="color:#10b981;">🏆 ¡SEMANA SUPERADA!</h1>
+            <p>Has cerrado el Domingo con <b>${fmt(state.cash)}</b> en caja y una racha máxima de <b>${state.streak}</b>.</p>
+            <button class="btn btn-done" style="width:100%; margin-top:12px;" onclick="showStartModal()">NUEVA SEMANA</button>
+          </div>
+        `;
+        ov.style.display = 'flex';
+        return;
+      }
+
+      const nextDay = DAYS[state.dayIdx + 1];
+      const ov = document.getElementById('overlay');
+
+      const renderShopHTML = () => {
+        const cards = UPGRADES.map(u => {
+          const owned = !!state.upgrades[u.id];
+          const canBuy = !owned && state.cash > u.cost + 20;
+          return `
+            <div class="shop-card ${owned ? 'owned' : ''}">
+              <div>
+                <h4>${u.name}</h4>
+                <small>${u.desc}</small>
+              </div>
+              <button class="btn ${owned ? 'btn-uv' : 'btn-done'}"
+                style="padding:6px 8px; font-size:0.78rem;"
+                ${owned || !canBuy ? 'disabled' : ''}
+                onclick="buyUpgrade('${u.id}')">
+                ${owned ? '✅ Instalado' : `Comprar (${u.cost} €)`}
+              </button>
+            </div>
+          `;
+        }).join('');
+
+        ov.innerHTML = `
+          <div class="modal">
+            <h1>🧾 Cierre del ${day.name}</h1>
+            <p>Balance del día: <b style="color:${profit >= 0 ? '#10b981' : '#ef4444'}">${profit >= 0 ? '+' : ''}${fmt(profit)}</b> · Caja actual: <b>${fmt(state.cash)}</b></p>
+            <div class="shop-grid">${cards}</div>
+            <button class="btn btn-done" style="width:100%;" onclick="startNextDay()">ABRIR ${nextDay.name.toUpperCase()} (${nextDay.desc})</button>
+          </div>
+        `;
+      };
+
+      window.buyUpgrade = (id) => {
+        const upg = UPGRADES.find(u => u.id === id);
+        if (!upg || state.upgrades[id] || state.cash <= upg.cost + 20) return;
+        state.cash = +(state.cash - upg.cost).toFixed(2);
+        state.upgrades[id] = true;
+        playTone(960, 'triangle', 0.15);
+        updateHUD();
+        renderShopHTML();
+      };
+
+      renderShopHTML();
+      ov.style.display = 'flex';
+    }
+
+    function startNextDay() {
+      state.dayIdx++;
+      state.clientInDay = 0;
+      state.dayStartCash = state.cash;
+      document.getElementById('overlay').style.display = 'none';
+      nextClient();
+    }
+
+    showStartModal();
+  </script>
+</body>
+</html>
