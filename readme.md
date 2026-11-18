@@ -1,5 +1,9 @@
 # 👁️ Ojo al Cambio
 
+## 🎮 [▶️ JUGAR AHORA](https://quinigrama.github.io/ojo-al-cambio/)
+
+`https://quinigrama.github.io/ojo-al-cambio/`
+
 Simulador arcade web de cálculo mental rápido y reflejos detrás del mostrador, inspirado en los clásicos timos del **cambio corto (*short-change scam*)**, **manos largas** y **billetes falsos**.
 
 ## 🎮 Mecánicas Principales
