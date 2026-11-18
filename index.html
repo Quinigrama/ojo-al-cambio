@@ -312,11 +312,9 @@
     }
 
     .controls-row {
-      display: flex;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: 8px;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
     }
 
     .btn {
@@ -334,6 +332,7 @@
     .btn-uv.active { background: #9333ea; box-shadow: 0 0 14px #a855f7; }
     .btn-fake { background: #dc2626; color: #fff; }
     .btn-done { background: #10b981; color: #052e16; font-size: 0.94rem; padding: 10px 16px; }
+    .btn-cancel { background: #475569; color: #f8fafc; border: 1px solid #94a3b8; }
     .btn-install { background: #2563eb; color: #fff; margin-top: 8px; width: 100%; display: none; }
 
     .drawer {
@@ -493,6 +492,7 @@
     <div class="controls-row">
       <button class="btn btn-uv" id="btn-uv" onclick="toggleUV()">🔦 LUZ UV (U)</button>
       <button class="btn btn-fake" onclick="reportFake()">🚫 ¡BILLETE FALSO!</button>
+      <button class="btn btn-cancel" onclick="cancelSale()">🛑 ANULAR VENTA</button>
       <button class="btn btn-done" onclick="finishTransaction()">✅ CERRAR VENTA</button>
     </div>
 
@@ -633,6 +633,7 @@
       itemsOnTable: [],
       hasFakeBill: false,
       fakeVal: 0,
+      isScammer: false,
       handState: 'hidden'
     };
 
@@ -694,6 +695,7 @@
             • <b>Cobra:</b> pincha los billetes y monedas del cliente para guardarlos.<br>
             • <b>Prepara el cambio:</b> toca tu cajón; las piezas iguales se apilan con un contador ×N.<br>
             • <b>Vigila sus manos:</b> si su mano entra a robar o dar el cambiazo, <b>pínchala rápido</b>.<br>
+            • <b>Anular venta:</b> si el cliente te la juega (recupera su billete, te lía con el cambio…), anula: le devuelves todo, no le das el producto y no pierdes nada. ¡Pero no anules a un cliente honrado!<br>
             • <b>Luz UV (tecla U):</b> los billetes buenos muestran la marca ★ EUR. Si no la tiene, ¡denúncialo!<br>
             • <b>Tiempo:</b> cuanto más cambio hay que dar, más tiempo tienes.
           </div>
@@ -822,6 +824,7 @@
       state.itemsOnTable = [];
       state.hasFakeBill = false;
       state.fakeVal = 0;
+      state.isScammer = false;
 
       const prod = pick(PRODUCTS);
       state.currentProduct = prod;
@@ -845,6 +848,7 @@
         }
       } else if (roll < day.fakeChance + day.scamChance) {
         paid = bigBill;
+        state.isScammer = true;
         spawnItemOnTable(paid, 'customer', false);
         extraSeconds = 6; // tiempo extra para lidiar con el timador
         scheduleScamTwist(paid);
@@ -911,7 +915,7 @@
               updateHUD();
               showToast(`💸 ¡Te ha birlado ${fmt(stolen.val)} de tu cambio! (-${fmt(stolen.val)})`, '#ef4444');
             } else {
-              showToast(`💸 ¡Ha recuperado su billete de ${fmt(stolen.val)} sin que lo cobraras!`, '#ef4444');
+              showToast(`💸 ¡Ha recuperado su billete de ${fmt(stolen.val)}! Anula la venta 🛑`, '#ef4444');
             }
             renderTable();
             playTone(140, 'sawtooth', 0.25);
@@ -960,6 +964,29 @@
         state.streak = 0;
         playTone(150, 'sawtooth', 0.25);
         showToast("❌ Ese billete era auténtico. El cliente se va enfadado (-10,00 €)", "#ef4444");
+      }
+      updateHUD();
+      advanceTurn();
+    }
+
+    // Anular: se devuelve al cliente lo cobrado, tu cambio vuelve al cajón y no se entrega el producto
+    function cancelSale() {
+      if (!state.active) return;
+      endClient();
+
+      if (state.hasFakeBill) {
+        state.streak++;
+        playTone(700, 'triangle', 0.15);
+        showToast("🛑 Venta anulada: no aceptas su billete (falso). Sin pérdidas.<br><small>Con ¡BILLETE FALSO! te llevas +5,00 €</small>", "#10b981");
+      } else if (state.isScammer) {
+        state.streak++;
+        playTone(1040, 'triangle', 0.15);
+        showToast("🛑 ¡Venta anulada! El timador se va con las manos vacías (+Racha)", "#10b981");
+      } else {
+        state.cash = round2(state.cash - 3);
+        state.streak = 0;
+        playTone(150, 'sawtooth', 0.25);
+        showToast("😠 Era un cliente honrado y se va sin comprar (-3,00 €)", "#ef4444");
       }
       updateHUD();
       advanceTurn();

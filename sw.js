@@ -1,5 +1,5 @@
 // Sube la versión cuando cambies algo para forzar la limpieza de la caché antigua
-const CACHE_NAME = 'ojo-al-cambio-v1.1.0';
+const CACHE_NAME = 'ojo-al-cambio-v1.2.0';
 const ASSETS = [
   './',
   './index.html',
